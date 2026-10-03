@@ -1,0 +1,65 @@
+name: FitRota Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "FitRota-0.6.3-RevenueCat.zip"
+      - ".github/workflows/android.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v4
+
+      - name: Extract FitRota source
+        run: python3 -m zipfile -e FitRota-0.6.3-RevenueCat.zip app-source
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app-source/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        working-directory: app-source
+        run: npm ci --include=dev
+
+      - name: Check and build app
+        working-directory: app-source
+        run: npm run check
+
+      - name: Sync Android
+        working-directory: app-source
+        run: npx cap sync android
+
+      - name: Build test APK
+        working-directory: app-source/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FitRota-Android-APK
+          path: app-source/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

@@ -6,7 +6,7 @@ on:
       zip_file:
         description: ZIP filename
         required: true
-        default: FitRota-0623-AdMob.zip
+        default: FitRota-0624-Android.zip
 
 permissions:
   contents: read
@@ -43,55 +43,17 @@ jobs:
           test -f "$ZIP_FILE"
           python3 -m zipfile -e "$ZIP_FILE" fitrota-build
           test -f fitrota-build/package.json
-          test -f fitrota-build/android/gradlew
-
-      - name: Fix Android icon references
-        working-directory: fitrota-build
-        run: |
-          python3 - <<'PYTHON'
-          from pathlib import Path
-          import shutil
-
-          res = Path("android/app/src/main/res")
-          source = res / "drawable-nodpi/fitrota_logo.png"
-          target = res / "mipmap-nodpi/fitrota_logo.png"
-
-          if not source.is_file():
-              raise SystemExit("FitRota logo file is missing")
-
-          target.parent.mkdir(parents=True, exist_ok=True)
-          shutil.copyfile(source, target)
-
-          aliases = res / "values/fitrota_icons.xml"
-          text = aliases.read_text()
-          aliases.write_text(
-              text.replace("@drawable/fitrota_logo", "@mipmap/fitrota_logo")
-          )
-          PYTHON
+          test -f fitrota-build/android/app/debug-test.keystore
 
       - name: Build and sync
         working-directory: fitrota-build
         run: |
           npm ci --include=dev
+          npm run test:native-account
           npm run test:admob
           npm run build:us
           npx cap sync android
-
-      - name: Remove compressed web copies
-        working-directory: fitrota-build
-        run: |
-          python3 - <<'PYTHON'
-          from pathlib import Path
-
-          assets = Path("android/app/src/main/assets/public")
-
-          if not (assets / "index.html").is_file():
-              raise SystemExit("Android index.html is missing")
-
-          for path in assets.rglob("*"):
-              if path.is_file() and path.suffix in {".gz", ".br"}:
-                  path.unlink()
-          PYTHON
+          npm run native:prepare
 
       - name: Build APK and AAB
         working-directory: fitrota-build/android

@@ -45,6 +45,30 @@ jobs:
           test -f fitrota-build/package.json
           test -f fitrota-build/android/gradlew
 
+      - name: Fix Android icon references
+        working-directory: fitrota-build
+        run: |
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          import shutil
+
+          res = Path("android/app/src/main/res")
+          source = res / "drawable-nodpi/fitrota_logo.png"
+          target = res / "mipmap-nodpi/fitrota_logo.png"
+
+          if not source.is_file():
+              raise SystemExit("FitRota logo file is missing")
+
+          target.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copyfile(source, target)
+
+          aliases = res / "values/fitrota_icons.xml"
+          text = aliases.read_text()
+          aliases.write_text(
+              text.replace("@drawable/fitrota_logo", "@mipmap/fitrota_logo")
+          )
+          PYTHON
+
       - name: Build and sync
         working-directory: fitrota-build
         run: |
@@ -52,6 +76,10 @@ jobs:
           npm run test:admob
           npm run build:us
           npx cap sync android
+
+      - name: Remove compressed web copies
+        working-directory: fitrota-build
+        run: |
           python3 - <<'PYTHON'
           from pathlib import Path
 

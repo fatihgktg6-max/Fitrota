@@ -40,6 +40,7 @@ jobs:
         env:
           ZIP_FILE: ${{ inputs.zip_file }}
         run: |
+          set -euo pipefail
           test -f "$ZIP_FILE"
           python3 -m zipfile -e "$ZIP_FILE" fitrota-build
           test -f fitrota-build/package.json
@@ -48,6 +49,7 @@ jobs:
       - name: Build and sync
         working-directory: fitrota-build
         run: |
+          set -euo pipefail
           npm ci --include=dev
           npm run test:native-account
           npm run test:admob
@@ -58,15 +60,60 @@ jobs:
       - name: Build APK and AAB
         working-directory: fitrota-build/android
         run: |
+          set -euo pipefail
           chmod +x gradlew
           ./gradlew assembleDebug bundleRelease --no-daemon --stacktrace
 
-      - name: Upload build files
+      - name: Sign and verify AAB
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${ANDROID_KEYSTORE_BASE64:?Missing keystore secret}"
+          : "${ANDROID_KEYSTORE_PASSWORD:?Missing keystore password}"
+          : "${ANDROID_KEY_ALIAS:?Missing key alias}"
+          : "${ANDROID_KEY_PASSWORD:?Missing key password}"
+
+          KEYSTORE_FILE="$RUNNER_TEMP/fitrota-upload.jks"
+          trap 'rm -f "$KEYSTORE_FILE"' EXIT
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" |
+            base64 --decode > "$KEYSTORE_FILE"
+
+          AAB_FILE="fitrota-build/android/app/build/outputs/bundle/release/app-release.aab"
+          test -s "$AAB_FILE"
+          mkdir -p signed-output
+
+          jarsigner \
+            -keystore "$KEYSTORE_FILE" \
+            -storepass:env ANDROID_KEYSTORE_PASSWORD \
+            -keypass:env ANDROID_KEY_PASSWORD \
+            -signedjar signed-output/FitRota-0624-signed.aab \
+            "$AAB_FILE" \
+            "$ANDROID_KEY_ALIAS"
+
+          LC_ALL=C jarsigner \
+            -verify signed-output/FitRota-0624-signed.aab |
+            tee "$RUNNER_TEMP/fitrota-signature-check.txt"
+
+          grep -Fq 'jar verified.' \
+            "$RUNNER_TEMP/fitrota-signature-check.txt"
+
+      - name: Upload signed AAB
         uses: actions/upload-artifact@v4
         with:
-          name: FitRota-Android-Test
+          name: FitRota-Play-Signed-AAB
           if-no-files-found: error
           retention-days: 14
-          path: |
-            fitrota-build/android/app/build/outputs/apk/debug/*.apk
-            fitrota-build/android/app/build/outputs/bundle/release/*.aab
+          path: signed-output/FitRota-0624-signed.aab
+
+      - name: Upload test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FitRota-Test-APK
+          if-no-files-found: error
+          retention-days: 14
+          path: fitrota-build/android/app/build/outputs/apk/debug/*.apk

@@ -36,12 +36,6 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
-      - name: Check build tools
-        run: |
-          java -version
-          node --version
-          sdkmanager --version
-
       - name: Extract ZIP
         env:
           ZIP_FILE: ${{ inputs.zip_file }}
@@ -58,6 +52,18 @@ jobs:
           npm run test:admob
           npm run build:us
           npx cap sync android
+          python3 - <<'PYTHON'
+          from pathlib import Path
+
+          assets = Path("android/app/src/main/assets/public")
+
+          if not (assets / "index.html").is_file():
+              raise SystemExit("Android index.html is missing")
+
+          for path in assets.rglob("*"):
+              if path.is_file() and path.suffix in {".gz", ".br"}:
+                  path.unlink()
+          PYTHON
 
       - name: Build APK and AAB
         working-directory: fitrota-build/android

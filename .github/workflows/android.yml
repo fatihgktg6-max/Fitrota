@@ -31,6 +31,17 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+
+      - name: Check build tools
+        run: |
+          java -version
+          node --version
+          sdkmanager --version
+
       - name: Extract ZIP
         env:
           ZIP_FILE: ${{ inputs.zip_file }}
@@ -47,12 +58,6 @@ jobs:
           npm run test:admob
           npm run build:us
           npx cap sync android
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Build APK and AAB
         working-directory: fitrota-build/android

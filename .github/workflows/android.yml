@@ -53,7 +53,7 @@ jobs:
           npm ci --include=dev
           npm run test:native-account
           npm run test:admob
-          npm run build:us
+          npm run build:turkey-test
           npx cap sync android
           npm run native:prepare
 
